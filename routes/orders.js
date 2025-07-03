@@ -1,23 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2');
-
-// ✅ DB connection
 require('dotenv').config();
 
-
+// ✅ DB Connection
 const db = mysql.createConnection({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
   password: process.env.MYSQL_ADDON_PASSWORD,
   database: process.env.MYSQL_ADDON_DB,
   port: 3306,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
-// ✅ GET: all orders for a store
+// ✅ GET all orders for a store
 router.get('/', (req, res) => {
   const storeId = req.query.storeId;
   if (!storeId) return res.status(400).json({ error: 'storeId is required in query' });
@@ -39,7 +35,7 @@ router.get('/', (req, res) => {
   });
 });
 
-// ✅ POST: create new order with store_id
+// ✅ POST new order
 router.post('/', (req, res) => {
   const { customer_id, total_amount, status, items, store_id } = req.body;
 
@@ -59,18 +55,8 @@ router.post('/', (req, res) => {
     }
 
     const orderId = result.insertId;
-
-    const itemSql = `
-      INSERT INTO order_items (order_id, product_id, quantity, store_id)
-      VALUES ?
-    `;
-
-    const values = items.map(item => [
-      orderId,
-      item.product_id,
-      item.quantity,
-      store_id
-    ]);
+    const itemSql = `INSERT INTO order_items (order_id, product_id, quantity, store_id) VALUES ?`;
+    const values = items.map(item => [orderId, item.product_id, item.quantity, store_id]);
 
     db.query(itemSql, [values], (itemErr) => {
       if (itemErr) {
@@ -78,15 +64,12 @@ router.post('/', (req, res) => {
         return res.status(500).json({ error: 'Database error while inserting order items' });
       }
 
-      res.status(201).json({
-        message: '✅ Order and items saved successfully',
-        orderId
-      });
+      res.status(201).json({ message: '✅ Order and items saved successfully', orderId });
     });
   });
 });
 
-// ✅ PUT: update order status and insert into sales if Delivered
+// ✅ PUT update order status and insert into sales if Delivered
 router.put('/:orderId/status', (req, res) => {
   const { orderId } = req.params;
   const { status, storeId } = req.body;
@@ -102,28 +85,25 @@ router.put('/:orderId/status', (req, res) => {
     WHERE o.order_id = ? AND c.store_id = ?
   `;
 
-  db.query(updateSql, [status, orderId, storeId], async (err, result) => {
+  db.query(updateSql, [status, orderId, storeId], (err, result) => {
     if (err) {
       console.error('🔴 Error updating order status:', err.message);
       return res.status(500).json({ error: 'Database error while updating order status' });
     }
 
     if (result.affectedRows === 0) {
-      return res.status(403).json({ error: 'Unauthorized: Order not found for this store or not allowed' });
+      return res.status(403).json({ error: 'Unauthorized: Order not found for this store' });
     }
 
     if (status !== 'Delivered') {
       return res.json({ message: '✅ Order status updated successfully' });
     }
 
-    // ✅ Step 1: Get order items
+    // ✅ Insert into sales if Delivered
     const fetchItemsSql = `
       SELECT 
-        oi.product_id,
-        oi.quantity,
-        p.price AS price,
-        o.customer_id,
-        o.date_ordered
+        oi.product_id, oi.quantity, p.price,
+        o.customer_id, o.date_ordered
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.order_id
       JOIN customers c ON o.customer_id = c.customer_id
@@ -131,7 +111,7 @@ router.put('/:orderId/status', (req, res) => {
       WHERE oi.order_id = ? AND c.store_id = ?
     `;
 
-    db.query(fetchItemsSql, [orderId, storeId], async (itemErr, items) => {
+    db.query(fetchItemsSql, [orderId, storeId], (itemErr, items) => {
       if (itemErr) {
         console.error('🔴 Error fetching order items for sales:', itemErr.message);
         return res.status(500).json({ error: 'Error preparing sales record' });
@@ -166,18 +146,16 @@ router.put('/:orderId/status', (req, res) => {
           return res.status(500).json({ error: 'Failed to record sales data' });
         }
 
-        return res.json({ message: '✅ Order marked as Delivered and sales recorded' });
+        res.json({ message: '✅ Order marked as Delivered and sales recorded' });
       });
     });
   });
 });
 
-// ✅ GET: products for a store
+// ✅ GET products for a store
 router.get('/products', (req, res) => {
   const storeId = req.query.storeId;
-  if (!storeId) {
-    return res.status(400).json({ error: 'storeId is required in query' });
-  }
+  if (!storeId) return res.status(400).json({ error: 'storeId is required in query' });
 
   const sql = `SELECT * FROM products WHERE store_id = ?`;
 
@@ -191,27 +169,7 @@ router.get('/products', (req, res) => {
   });
 });
 
-// ✅ NEW: GET customers filtered by storeId
-// GET: products for a store
-router.get('/products', (req, res) => {
-  const storeId = req.query.storeId;
-  if (!storeId) {
-    return res.status(400).json({ error: 'storeId is required in query' });
-  }
-
-  const sql = `SELECT * FROM products WHERE store_id = ?`;
-
-  db.query(sql, [storeId], (err, results) => {
-    if (err) {
-      console.error('🔴 Error fetching products:', err.message);
-      return res.status(500).json({ error: 'Database error while fetching products' });
-    }
-
-    res.json(results);
-  });
-});
-
-// GET: customers for a store
+// ✅ GET customers for a store
 router.get('/customers_orders', (req, res) => {
   const storeId = req.query.storeId;
   if (!storeId) return res.status(400).json({ error: 'storeId is required in query' });
@@ -226,6 +184,5 @@ router.get('/customers_orders', (req, res) => {
     res.json(results);
   });
 });
-
 
 module.exports = router;

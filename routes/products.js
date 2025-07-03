@@ -5,39 +5,35 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
-// DB Connection using .env variables
 require('dotenv').config();
+
+// ✅ DB Connection using .env
 const db = mysql.createConnection({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
   password: process.env.MYSQL_ADDON_PASSWORD,
   database: process.env.MYSQL_ADDON_DB,
   port: 3306,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
-// Multer config
+// ✅ Multer Config for Image Uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = path.join(__dirname, '../uploads');
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath);
-    }
+    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
+    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
     cb(null, uniqueName);
   }
 });
 
 const upload = multer({ storage });
 
-// Middleware to verify JWT and attach user info
+// ✅ Middleware: JWT Authentication
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
@@ -46,54 +42,42 @@ function authenticateToken(req, res, next) {
 
   jwt.verify(token, 'your-secret-key', (err, decoded) => {
     if (err) return res.status(403).json({ message: 'Invalid token' });
-    req.user = decoded; // contains user_id, store_id, user_type
+    req.user = decoded; // { user_id, store_id, user_type }
     next();
   });
 }
 
-// ✅ GET /api/products - Fetch products for the logged-in user's store
+// ✅ GET All Products for Store
 router.get('/', authenticateToken, (req, res) => {
   const { store_id } = req.user;
 
   const query = `
-    SELECT 
-      p.*, 
-      IFNULL(SUM(oi.quantity), 0) AS total_sold
-    FROM 
-      products p
-    LEFT JOIN 
-      order_items oi 
-      ON p.product_id = oi.product_id AND oi.store_id = ?
-    WHERE 
-      p.store_id = ?
-    GROUP BY 
-      p.product_id
+    SELECT p.*, IFNULL(SUM(oi.quantity), 0) AS total_sold
+    FROM products p
+    LEFT JOIN order_items oi ON p.product_id = oi.product_id AND oi.store_id = ?
+    WHERE p.store_id = ?
+    GROUP BY p.product_id
   `;
 
   db.query(query, [store_id, store_id], (err, results) => {
-    if (err) {
-      console.error('Error fetching products with total_sold:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
+    if (err) return res.status(500).json({ error: 'Database error' });
     res.json(results);
   });
 });
 
-// ✅ GET /api/products/categories - Fetch unique categories
+// ✅ GET Distinct Categories
 router.get('/categories', authenticateToken, (req, res) => {
   const { store_id } = req.user;
+
   const query = `SELECT DISTINCT product_category AS name FROM products WHERE store_id = ?`;
 
   db.query(query, [store_id], (err, results) => {
-    if (err) {
-      console.error('Error fetching categories:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
+    if (err) return res.status(500).json({ error: 'Database error' });
     res.json(results);
   });
 });
 
-// ✅ GET /api/products/category-counts - Category count by store
+// ✅ GET Category Counts
 router.get('/category-counts', authenticateToken, (req, res) => {
   const { store_id } = req.user;
 
@@ -105,19 +89,15 @@ router.get('/category-counts', authenticateToken, (req, res) => {
   `;
 
   db.query(query, [store_id], (err, results) => {
-    if (err) {
-      console.error('Error fetching category counts:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
+    if (err) return res.status(500).json({ error: 'Database error' });
     res.json(results);
   });
 });
 
-// ✅ POST /api/products/add - Add new product
+// ✅ POST Add New Product
 router.post('/add', authenticateToken, upload.single('image'), (req, res) => {
   const { product_name, price, product_category, description, stock_quantity } = req.body;
   const { store_id } = req.user;
-
   const image_url = req.file ? `uploads/${req.file.filename}` : null;
 
   const query = `
@@ -126,44 +106,26 @@ router.post('/add', authenticateToken, upload.single('image'), (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
 
-  const values = [
-    product_name,
-    price,
-    product_category,
-    description,
-    stock_quantity,
-    image_url,
-    store_id
-  ];
+  const values = [product_name, price, product_category, description, stock_quantity, image_url, store_id];
 
-  db.query(query, values, (err, result) => {
-    if (err) {
-      console.error('Error inserting product:', err);
-      return res.status(500).json({ error: 'Failed to insert product' });
-    }
+  db.query(query, values, (err) => {
+    if (err) return res.status(500).json({ error: 'Failed to insert product' });
     res.status(201).json({ message: 'Product added successfully' });
   });
 });
 
-// ✅ GET /api/products/filter - Filter and search products
+// ✅ GET Filtered Products (Advanced)
 router.get('/filter', authenticateToken, (req, res) => {
   const { store_id } = req.user;
   const { category, minPrice, maxPrice, inStock, search, startDate, endDate, minSold, maxSold } = req.query;
 
   let query = `
-    SELECT 
-      p.*, 
-      IFNULL(SUM(oi.quantity), 0) AS total_sold
-    FROM 
-      products p
-    LEFT JOIN 
-      order_items oi 
-      ON p.product_id = oi.product_id AND oi.store_id = ?
-    WHERE 
-      p.store_id = ?
+    SELECT p.*, IFNULL(SUM(oi.quantity), 0) AS total_sold
+    FROM products p
+    LEFT JOIN order_items oi ON p.product_id = oi.product_id AND oi.store_id = ?
+    WHERE p.store_id = ?
   `;
-
-  let params = [store_id, store_id];
+  const params = [store_id, store_id];
 
   if (category && category !== 'All') {
     query += ` AND p.product_category = ?`;
@@ -209,10 +171,7 @@ router.get('/filter', authenticateToken, (req, res) => {
   }
 
   db.query(query, params, (err, results) => {
-    if (err) {
-      console.error('❌ Error filtering products:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
+    if (err) return res.status(500).json({ error: 'Database error' });
     res.json(results);
   });
 });

@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
-
 require('dotenv').config();
 
 // ✅ MySQL connection pool
@@ -48,9 +46,9 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// ✅ POST /api/stores_backup — Create new store
+// ✅ POST /api/stores_backup — Create store
 router.post(
-  '/stores_backup',
+  '/',
   upload.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'banner_image', maxCount: 1 }
@@ -63,7 +61,10 @@ router.post(
         currency, timezone, business_type, password
       } = req.body;
 
-      // Check if user exists by email
+      if (!store_name || !store_email || !store_address || !password) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+
       const [userRows] = await pool.query(
         'SELECT user_id FROM users WHERE email = ?',
         [store_email]
@@ -74,12 +75,9 @@ router.post(
       }
 
       const user_id = userRows[0].user_id;
-      const hashedPassword = await bcrypt.hash(password, 10);
-
       const logo = req.files?.logo?.[0] ? `/uploads/${req.files.logo[0].filename}` : null;
       const banner_image = req.files?.banner_image?.[0] ? `/uploads/${req.files.banner_image[0].filename}` : null;
 
-      // Insert store
       const [result] = await pool.query(`
         INSERT INTO stores_backup (
           store_name, store_email, store_address,
@@ -93,12 +91,11 @@ router.post(
         slug, description, facebook, instagram,
         theme, primary_color, logo, banner_image,
         currency, timezone, business_type,
-        hashedPassword
+        password // ✅ plain-text password
       ]);
 
       const store_id = result.insertId;
 
-      // Update user with store_id
       await pool.query(
         'UPDATE users SET store_id = ? WHERE email = ?',
         [store_id, store_email]
@@ -108,13 +105,13 @@ router.post(
 
     } catch (err) {
       console.error('❌ Store creation error:', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 );
 
-// ✅ GET /api/stores_backup — Get store of logged-in user
-router.get('/api/stores_backup', authenticateToken, async (req, res) => {
+// ✅ GET /api/stores_backup — Store info of logged-in user
+router.get('/', authenticateToken, async (req, res) => {
   const { store_id } = req.user;
 
   if (!store_id) {
@@ -139,8 +136,8 @@ router.get('/api/stores_backup', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ GET /api/stores_backup/:id — Get store and its products by store_id
-router.get('/stores_backup/:id', async (req, res) => {
+// ✅ GET /api/stores_backup/:id — Public store + products
+router.get('/:id', async (req, res) => {
   try {
     const storeId = req.params.id;
 
@@ -165,7 +162,7 @@ router.get('/stores_backup/:id', async (req, res) => {
 
   } catch (err) {
     console.error('❌ Error fetching store and products:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

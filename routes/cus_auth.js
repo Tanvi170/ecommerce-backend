@@ -2,53 +2,42 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
-
-// DB pool
 require('dotenv').config();
 
-
+// ✅ MySQL pool connection
 const pool = mysql.createPool({
-  host: process.env.MYSQL_ADDON_HOST,
-  user: process.env.MYSQL_ADDON_USER,
-  password: process.env.MYSQL_ADDON_PASSWORD,
-  database: process.env.MYSQL_ADDON_DB,
+  host: process.env.MYSQL_ADDON_HOST || 'localhost',
+  user: process.env.MYSQL_ADDON_USER || 'root',
+  password: process.env.MYSQL_ADDON_PASSWORD || '',
+  database: process.env.MYSQL_ADDON_DB || 'e-commerce-db',
   port: 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  ssl: {
-    rejectUnauthorized: false // Important for Clever Cloud
-  }
+  ssl: process.env.MYSQL_ADDON_HOST ? { rejectUnauthorized: false } : undefined
 });
 
-
-
-// --- Customer Signup ---
+// ✅ Signup (plain-text password)
 router.post('/signup', async (req, res) => {
-  const { customer_name, email, password, phone_number, address, store_id } = req.body;
+  const { email, password } = req.body;
 
-  if (!email || !password || !customer_name || !phone_number || !address || !store_id) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
+  if (!email || !password)
+    return res.status(400).json({ message: 'Email and password are required' });
 
   try {
-    const [existing] = await pool.query(
-      'SELECT customer_id FROM customers WHERE email = ?',
-      [email]
-    );
-
+    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
-      return res.status(409).json({ message: 'Customer already exists' });
+      return res.status(409).json({ message: 'User already exists' });
     }
 
     const [result] = await pool.query(
-      'INSERT INTO customers (customer_name, email, password, phone_number, address, store_id, date_joined) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-      [customer_name, email, password, phone_number, address, store_id]
+      'INSERT INTO users (email, password, user_type, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+      [email, password, 'customer']
     );
 
     res.status(201).json({
-      message: 'Customer registered successfully!',
-      customerId: result.insertId,
+      message: 'User registered successfully!',
+      userId: result.insertId,
       email
     });
   } catch (err) {
@@ -57,53 +46,51 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// --- Customer Login ---
+// ✅ Login (plain-text password)
 router.post('/login', async (req, res) => {
-  const { email, password, store_id } = req.body;
+  const { email, password } = req.body;
 
-  if (!email || !password || !store_id) {
-    return res.status(400).json({ message: 'Email, password, and store ID are required' });
-  }
+  if (!email || !password)
+    return res.status(400).json({ message: 'Email and password are required' });
 
   try {
-    const [customers] = await pool.query(
-      'SELECT customer_id, email, password, store_id FROM customers WHERE email = ? AND store_id = ?',
-      [email, store_id]
+    const [users] = await pool.query(
+      'SELECT user_id, email, password, user_type, store_id FROM users WHERE email = ?',
+      [email]
     );
 
-    if (customers.length === 0) {
+    if (users.length === 0)
       return res.status(401).json({ message: 'Invalid credentials' });
-    }
 
-    const customer = customers[0];
+    const user = users[0];
 
-    if (password !== customer.password) {
+    if (password !== user.password)
       return res.status(401).json({ message: 'Invalid credentials' });
-    }
+
+    const token = jwt.sign(
+      {
+        user_id: user.user_id,
+        store_id: user.store_id,
+        user_type: user.user_type
+      },
+      process.env.JWT_SECRET, // ✅ use from .env or Render
+      { expiresIn: '1h' }
+    );
 
     res.status(200).json({
       message: 'Login successful!',
       user: {
-        id: customer.customer_id,
-        email: customer.email,
-        storeId: customer.store_id
+        id: user.user_id,
+        email: user.email,
+        userType: user.user_type,
+        storeId: user.store_id
       },
-      token: jwt.sign(
-        {
-          customer_id: customer.customer_id,
-          store_id: customer.store_id,
-          user_type: 'customer'
-        },
-        'your-secret-key',
-        { expiresIn: '1h' }
-      )
+      token
     });
-
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Server error during login' });
   }
 });
-
 
 module.exports = router;

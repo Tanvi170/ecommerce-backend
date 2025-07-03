@@ -2,11 +2,9 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
-
-// MySQL connection
 require('dotenv').config();
 
-
+// ✅ MySQL connection
 const db = mysql.createConnection({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
@@ -18,27 +16,24 @@ const db = mysql.createConnection({
   }
 });
 
-// Middleware to verify JWT and attach user info
+// ✅ JWT Auth Middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
 
   if (!token) return res.status(401).json({ message: 'Token missing' });
 
-  jwt.verify(token, 'your-secret-key', (err, decoded) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ message: 'Invalid token' });
-    console.log('✅ Decoded token:', decoded);  // <-- Add this temporarily
-
     req.user = decoded; // contains user_id, store_id, user_type
     next();
   });
 }
 
-// GET /api/feedback - fetch feedback only for the logged-in shop owner's store
+// ✅ GET /api/feedback — Fetch feedback for the logged-in shop owner's store
 router.get('/', authenticateToken, (req, res) => {
   const { store_id, user_type } = req.user;
 
-  // Optional: Only allow shop_owner to access
   if (user_type !== 'shop_owner') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -60,10 +55,9 @@ router.get('/', authenticateToken, (req, res) => {
 
   db.query(sql, [store_id], (err, results) => {
     if (err) {
-      console.error('Error fetching feedback:', err);
+      console.error('❌ Error fetching feedback:', err);
       return res.status(500).json({ error: 'Internal server error' });
     }
-
     res.json(results);
   });
 });

@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
-
-// Create DB pool
 require('dotenv').config();
 
-
+// ✅ MySQL pool with SSL for Render / Clever Cloud
 const pool = mysql.createPool({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
@@ -16,10 +14,11 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   ssl: {
-    rejectUnauthorized: false // Important for Clever Cloud
+    rejectUnauthorized: false
   }
 });
 
+// ✅ GET /api/overview/:storeId
 router.get('/:storeId', async (req, res) => {
   const { storeId } = req.params;
 
@@ -54,7 +53,7 @@ router.get('/:storeId', async (req, res) => {
       WHERE c.store_id = ?
     `, [storeId]);
 
-    // 5. Top Selling Products
+    // 5. Top 5 Selling Products
     const [topProducts] = await pool.query(`
       SELECT p.product_name, SUM(oi.quantity) AS sold
       FROM order_items oi
@@ -65,14 +64,16 @@ router.get('/:storeId', async (req, res) => {
       LIMIT 5
     `, [storeId]);
 
-    // 6. Pending Orders (status = Processing)
+    // 6. Pending Orders (Processing)
     const [pendingOrders] = await pool.query(`
       SELECT o.order_id, o.total_amount, o.status, c.customer_name
       FROM orders o
       JOIN customers c ON o.customer_id = c.customer_id
       WHERE c.store_id = ? AND o.status = 'Processing'
     `, [storeId]);
- const [orderStatusData] = await pool.query(`
+
+    // 7. Orders by Status (for pie chart)
+    const [orderStatusData] = await pool.query(`
       SELECT o.status, COUNT(*) AS count
       FROM orders o
       JOIN customers c ON o.customer_id = c.customer_id
@@ -80,6 +81,7 @@ router.get('/:storeId', async (req, res) => {
       GROUP BY o.status
     `, [storeId]);
 
+    // 8. Daily Revenue (for line chart)
     const [dailyRevenue] = await pool.query(`
       SELECT DATE(o.date_ordered) AS date, SUM(o.total_amount) AS revenue
       FROM orders o
@@ -89,17 +91,12 @@ router.get('/:storeId', async (req, res) => {
       ORDER BY DATE(o.date_ordered)
     `, [storeId]);
 
-// console.log("📦 Top Products:", topProducts);
-// console.log("🕓 Pending Orders:", pendingOrders);
-// console.log("📈 Order Status Data:", orderStatusData);
-// console.log("📅 Daily Revenue:", dailyRevenue);
-
-
+    // ✅ Respond with all collected metrics
     res.json({
-      orders: orders.orders || 0,
-      productsSold: sold.productsSold || 0,
-      customers: customers.customers || 0,
-      revenue: revenue.revenue || 0,
+      orders: orders?.orders || 0,
+      productsSold: sold?.productsSold || 0,
+      customers: customers?.customers || 0,
+      revenue: revenue?.revenue || 0,
       topProducts,
       pendingOrders,
       orderStatusData,
@@ -107,8 +104,8 @@ router.get('/:storeId', async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Overview route error:", err);
-    res.status(500).json({ error: 'Could not fetch overview' });
+    console.error('❌ Overview route error:', err.message);
+    res.status(500).json({ error: 'Could not fetch overview data' });
   }
 });
 

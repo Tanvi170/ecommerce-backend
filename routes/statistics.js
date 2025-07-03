@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2');
-
-// DB connection
-
 require('dotenv').config();
+
+// ✅ MySQL Connection for Render/CleverCloud
 const db = mysql.createConnection({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
@@ -16,12 +15,14 @@ const db = mysql.createConnection({
   }
 });
 
-// GET /api/statistics?storeId=201 — Total stats
+// ✅ GET /api/statistics?storeId=201 — Total stats
 router.get('/', (req, res) => {
   const storeId = req.query.storeId;
-  if (!storeId) return res.status(400).json({ error: 'storeId is required' });
+  if (!storeId) {
+    return res.status(400).json({ error: 'storeId is required' });
+  }
 
-  const statsQuery = `
+  const query = `
     SELECT 
       COUNT(*) AS total_orders,
       COALESCE(SUM(total_sale_amount), 0) AS total_sales,
@@ -31,7 +32,7 @@ router.get('/', (req, res) => {
     WHERE store_id = ?
   `;
 
-  db.query(statsQuery, [storeId], (err, results) => {
+  db.query(query, [storeId], (err, results) => {
     if (err) {
       console.error('🔴 Error fetching stats:', err.message);
       return res.status(500).json({ error: 'Database error while fetching statistics' });
@@ -40,23 +41,25 @@ router.get('/', (req, res) => {
   });
 });
 
-// GET /api/statistics/by-date?storeId=201 — Daily sales by type
+// ✅ GET /api/statistics/by-date?storeId=201 — Daily sales split by type
 router.get('/by-date', (req, res) => {
   const storeId = req.query.storeId;
-  if (!storeId) return res.status(400).json({ error: 'storeId is required' });
+  if (!storeId) {
+    return res.status(400).json({ error: 'storeId is required' });
+  }
 
-  const sql = `
+  const query = `
     SELECT 
-      DATE_FORMAT(sale_date, '%Y-%m-%d') as date,
+      DATE_FORMAT(sale_date, '%Y-%m-%d') AS date,
       sale_type,
-      SUM(total_sale_amount) as total
+      SUM(total_sale_amount) AS total
     FROM sales
     WHERE store_id = ?
     GROUP BY date, sale_type
     ORDER BY date
   `;
 
-  db.query(sql, [storeId], (err, results) => {
+  db.query(query, [storeId], (err, results) => {
     if (err) {
       console.error('🔴 Error fetching sales by date:', err.message);
       return res.status(500).json({ error: 'Database error while fetching sales by date' });
