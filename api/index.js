@@ -15,6 +15,7 @@ const customerAuthRoutes = require('./routes/cus_auth');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
@@ -31,6 +32,12 @@ app.use('/api/overview', overview);
 app.use('/api/customer/auth', customerAuthRoutes);
 app.use('/api', stores_backup);
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+// ✅ Export the app for Vercel
+module.exports = app;
+
+// ✅ Optional: run locally if not running in Vercel
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running locally on http://localhost:${PORT}`);
+  });
+}

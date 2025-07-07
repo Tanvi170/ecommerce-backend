@@ -1,19 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
+const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// ✅ MySQL connection
-const db = mysql.createConnection({
+// ✅ MySQL pool for serverless compatibility
+const pool = mysql.createPool({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
   password: process.env.MYSQL_ADDON_PASSWORD,
   database: process.env.MYSQL_ADDON_DB,
   port: 3306,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false },
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
 // ✅ JWT Auth Middleware
@@ -25,13 +26,13 @@ function authenticateToken(req, res, next) {
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ message: 'Invalid token' });
-    req.user = decoded; // contains user_id, store_id, user_type
+    req.user = decoded;
     next();
   });
 }
 
 // ✅ GET /api/feedback — Fetch feedback for the logged-in shop owner's store
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   const { store_id, user_type } = req.user;
 
   if (user_type !== 'shop_owner') {
@@ -53,13 +54,13 @@ router.get('/', authenticateToken, (req, res) => {
     ORDER BY f.review_date DESC
   `;
 
-  db.query(sql, [store_id], (err, results) => {
-    if (err) {
-      console.error('❌ Error fetching feedback:', err);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const [results] = await pool.query(sql, [store_id]);
     res.json(results);
-  });
+  } catch (err) {
+    console.error('❌ Error fetching feedback:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;

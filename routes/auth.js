@@ -2,22 +2,21 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
+require('dotenv').config(); // only for local testing
 
-// Load environment variables
-require('dotenv').config();
-
-// DB pool
+// ✅ MySQL Pool (Clever Cloud-compatible)
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'e-commerce-db',
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DB,
+  port: process.env.MYSQL_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
 
-// --- Signup (plain-text password) ---
+// ✅ Signup Route (no password hashing)
 router.post('/signup', async (req, res) => {
   const { email, password } = req.body;
 
@@ -46,7 +45,7 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// --- Login (plain-text password match) ---
+// ✅ Login Route (plain-text password check)
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 

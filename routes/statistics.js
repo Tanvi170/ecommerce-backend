@@ -3,24 +3,20 @@ const router = express.Router();
 const mysql = require('mysql2');
 require('dotenv').config();
 
-// ✅ MySQL Connection for Render/CleverCloud
+// ✅ MySQL Connection (Vercel-compatible)
 const db = mysql.createConnection({
   host: process.env.MYSQL_ADDON_HOST,
   user: process.env.MYSQL_ADDON_USER,
   password: process.env.MYSQL_ADDON_PASSWORD,
   database: process.env.MYSQL_ADDON_DB,
   port: 3306,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
 // ✅ GET /api/statistics?storeId=201 — Total stats
 router.get('/', (req, res) => {
   const storeId = req.query.storeId;
-  if (!storeId) {
-    return res.status(400).json({ error: 'storeId is required' });
-  }
+  if (!storeId) return res.status(400).json({ error: 'storeId is required' });
 
   const query = `
     SELECT 
@@ -34,7 +30,7 @@ router.get('/', (req, res) => {
 
   db.query(query, [storeId], (err, results) => {
     if (err) {
-      console.error('🔴 Error fetching stats:', err.message);
+      console.error('Error fetching stats:', err.message);
       return res.status(500).json({ error: 'Database error while fetching statistics' });
     }
     res.json(results[0]);
@@ -44,9 +40,7 @@ router.get('/', (req, res) => {
 // ✅ GET /api/statistics/by-date?storeId=201 — Daily sales split by type
 router.get('/by-date', (req, res) => {
   const storeId = req.query.storeId;
-  if (!storeId) {
-    return res.status(400).json({ error: 'storeId is required' });
-  }
+  if (!storeId) return res.status(400).json({ error: 'storeId is required' });
 
   const query = `
     SELECT 
@@ -61,7 +55,7 @@ router.get('/by-date', (req, res) => {
 
   db.query(query, [storeId], (err, results) => {
     if (err) {
-      console.error('🔴 Error fetching sales by date:', err.message);
+      console.error('Error fetching sales by date:', err.message);
       return res.status(500).json({ error: 'Database error while fetching sales by date' });
     }
 
