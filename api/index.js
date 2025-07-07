@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+<<<<<<< HEAD
 const productsRoute = require('./routes/products');
 const customerRoute = require('./routes/customers');
 const ordersRoute = require('./routes/orders');
@@ -12,6 +13,19 @@ const statisticsRoutes = require('./routes/statistics');
 const overview = require('./routes/overview');
 const stores_backup = require('./routes/stores_backup');
 const customerAuthRoutes = require('./routes/cus_auth');
+=======
+const productsRoute = require('../routes/products');
+const customerRoute = require('../routes/customers');
+const ordersRoute = require('../routes/orders');
+const customerORoute = require('../routes/customers_orders');
+const authRoute = require('../routes/auth');
+const feedbackRoute = require('../routes/feedback');
+const statisticsRoutes = require('../routes/statistics');
+const overview = require('../routes/overview');
+const stores_backup = require('../routes/stores_backup');
+const customerAuthRoutes = require('../routes/cus_auth');
+
+>>>>>>> 183d1fe (updated imports)
 
 const app = express();
 const PORT = process.env.PORT || 5000;
